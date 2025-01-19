@@ -67,6 +67,9 @@ class DigitPaletteApp:
 
     def clone_digit(self, event):
         """Clone the clicked symbol directly under its palette location."""
+        if self.drawing_line:
+            # Prevent adding new symbols while in Line Mode
+            return
         label = event.widget
         digit = label["text"]
 
@@ -85,33 +88,81 @@ class DigitPaletteApp:
         self.digits.append(item)
 
     def handle_left_click(self, event):
-        """Handle mouse click on canvas"""
-        if not self.drawing_line:
+        """Handle mouse clicks on the canvas."""
+        if self.drawing_line:
+            self.start_line(event)
+        else:
             self.start_drag(event)
 
     def start_drag(self, event):
-        """Start dragging the symbol"""
+        """Start dragging the symbol."""
+        if self.drawing_line:
+            # Ignore dragging while in Line Mode
+            return
         item = self.canvas.find_closest(event.x, event.y)
         if "digit" in self.canvas.gettags(item):
             self.dragged_item = item
             self.drag_start_x = event.x
             self.drag_start_y = event.y
+            
+    def start_line(self, event):
+        """Start a line at the clicked position."""
+        if self.line_start is None:
+            # Record the starting position for the line
+            self.line_start = (event.x, event.y)
+            # Create a temporary line for visual feedback
+            self.temp_line = self.canvas.create_line(event.x, event.y, event.x, event.y, fill="black", width=2, tags="temp_line")
+        else:
+            # Draw the final line from the start position to the current position
+            x1, y1 = self.line_start
+            x2, y2 = event.x, event.y
+            line = self.canvas.create_line(x1, y1, x2, y2, fill="black", width=2, tags="line")
+            self.lines.append(line)
+            self.line_start = None  # Reset the start position
+            # Remove the temporary line
+            if self.temp_line:
+               self.canvas.delete(self.temp_line)
+               self.temp_line = None
 
     def drag(self, event):
-        """Move the dragged symbol with the mouse"""
-        if self.dragged_item:
+        """Move the dragged symbol with the mouse."""
+        if self.drawing_line:
+            # Update the temporary line while in Line Mode
+            if self.line_start is not None:
+                x1, y1 = self.line_start
+                x2, y2 = event.x, event.y
+                self.canvas.coords(self.temp_line, x1, y1, x2, y2)
+        elif self.dragged_item:
+            # Handle dragging of symbols
             if self.drag_start_x is not None and self.drag_start_y is not None:
                 delta_x = event.x - self.drag_start_x
                 delta_y = event.y - self.drag_start_y
                 self.canvas.move(self.dragged_item, delta_x, delta_y)
                 self.drag_start_x = event.x
                 self.drag_start_y = event.y
+                
+                
+    
 
+    
     def end_drag(self, event):
-        """End the drag and drop"""
-        self.dragged_item = None
-        self.drag_start_x = None
-        self.drag_start_y = None
+        """End the drag and drop or finalize the line."""
+        if self.drawing_line and self.line_start is not None:
+            # Finalize the line if in drawing mode
+            x1, y1 = self.line_start
+            x2, y2 = event.x, event.y
+            line = self.canvas.create_line(x1, y1, x2, y2, fill="black", width=2, tags="line")
+            self.lines.append(line)
+            self.line_start = None
+            # Remove the temporary line
+            if self.temp_line:
+                self.canvas.delete(self.temp_line)
+                self.temp_line = None
+        else:
+            # End dragging of symbols
+            self.dragged_item = None
+            self.drag_start_x = None
+            self.drag_start_y = None
 
     def show_context_menu(self, event):
         item = self.canvas.find_closest(event.x, event.y)
